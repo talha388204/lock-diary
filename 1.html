@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lock Diary — By Talha</title>
+
+  <!-- Marked (markdown) + jsPDF (PDF export) from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+  <!-- Firebase App (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/12.3.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.3.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* Minimal reset & fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+    :root{
+      --bg1:#071025; --bg2:#0b1220; --card: rgba(255,255,255,0.04);
+      --accent: linear-gradient(135deg,#3b82f6dd,#06b6d4dd);
+      --glass-border: rgba(255,255,255,0.06);
+      --muted: #dbeafe;
+      --input-bg:#1a2233;
+      --input-color:#f7fafd;
+      --input-caret: #2563eb;
+      --btn-text: #f7fafd;
+    }
+    *{box-sizing:border-box}
+    html,body,#app{height:100%}
+    body{
+      margin:0; font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial;
+      background: radial-gradient(1000px 600px at 10% 10%, rgba(10,20,40,0.6), transparent),
+                  radial-gradient(800px 500px at 90% 90%, rgba(5,8,20,0.6), transparent),
+                  linear-gradient(180deg,var(--bg1),var(--bg2));
+      color:#e6eef8; -webkit-font-smoothing:antialiased;
+      padding:24px;
+    }
+
+    /* layout */
+    .wrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 2fr;gap:24px}
+    .full {max-width:1000px;margin:0 auto}
+
+    /* glass card */
+    .card{
+      background: var(--card);
+      border:1px solid var(--glass-border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding:16px;border-radius:14px;
+      box-shadow: 0 8px 30px rgba(2,6,23,0.6);
+    }
+
+    header.card{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .logo{display:flex;align-items:center;gap:12px}
+    .logo .mark{width:44px;height:44px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:6px 0 0;color:var(--muted);font-size:13px}
+
+    /* lock screen */
+    #lockScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;z-index:9999}
+    .lockBox{width:460px;max-width:100%;padding:20px;border-radius:14px}
+    .modes{display:flex;gap:8px;margin-bottom:12px}
+  .modes button {padding:8px 10px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:var(--btn-text)}
+    .modes button.active{background:rgba(255,255,255,0.06)}
+    .input{
+      width:100%;
+      padding:10px;
+      border-radius:10px;
+      border:1px solid var(--glass-border);
+      background: var(--input-bg);
+      color: var(--input-color);
+      margin-bottom:10px;
+      caret-color: var(--input-caret);
+      transition: background 0.2s, color 0.2s;
+    }
+
+    /* pattern grid */
+    .patternGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:200px;margin:12px auto}
+    .dot{width:52px;height:52px;border-radius:50%;border:2px solid var(--glass-border);display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent}
+    .dot.active{background:rgba(255,255,255,0.06);border-color:rgba(99,102,241,0.9)}
+
+    /* editor / list columns */
+    .editor{display:flex;flex-direction:column;gap:8px}
+    input.title{
+      padding:10px;
+      border-radius:8px;
+      border:1px solid var(--glass-border);
+      background: var(--input-bg);
+      color: var(--input-color);
+      caret-color: var(--input-caret);
+      transition: background 0.2s, color 0.2s;
+    }
+    textarea.mark{
+      min-height:180px;
+      padding:10px;
+      border-radius:8px;
+      border:1px solid var(--glass-border);
+      background: var(--input-bg);
+      color: var(--input-color);
+      caret-color: var(--input-caret);
+      transition: background 0.2s, color 0.2s;
+    }
+    .row{display:flex;gap:8px;align-items:center}
+    .btn{
+      padding:8px 12px;
+      border-radius:8px;
+      border:1px solid var(--glass-border);
+      background:transparent;
+      cursor:pointer;
+      color:var(--btn-text);
+      font-weight:500;
+    }
+    .btn.primary{background:rgba(255,255,255,0.08)}
+    .muted{color:var(--muted);font-size:13px}
+
+    /* entries list */
+    .search{margin-bottom:12px}
+    .entry{padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.02);background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
+    .entry h3{margin:0;font-size:16px}
+    .entry .meta{font-size:13px;color:var(--muted);margin-bottom:8px}
+    .entry .content img{max-width:100%;border-radius:8px;margin-top:8px}
+
+    /* responsive */
+    @media (max-width:900px){
+      .wrap{grid-template-columns:1fr; padding-bottom:120px}
+    }
+
+    footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
+    .top-right{display:flex;gap:8px;align-items:center}
+  .small{font-size:12px;color:var(--muted)}
+    /* Placeholder text color for all input/textarea */
+    input::placeholder,
+    textarea::placeholder {
+      color: #e0e7ef;
+      opacity: 1;
+    }
+    .tag{padding:6px 8px;border-radius:8px;border:1px solid var(--glass-border);background:transparent}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div style="position:fixed;top:10px;right:10px;z-index:10000">
+      <button class="btn" id="googleLoginBtn">Sign in with Google</button>
+      <span id="firebaseUserInfo" class="muted"></span>
+    </div>
+    <!-- Lock Screen (overlay) -->
+    <div id="lockScreen">
+      <div class="card lockBox">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <h2 style="margin:0">Lock Diary</h2>
+            <p class="lead">Enter your lock to continue</p>
+          </div>
+          <div class="top-right">
+            <div class="small">Local only • No servers</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" id="lockControls">
+          <div class="modes">
+            <button id="modePin" class="active">PIN</button>
+            <button id="modePassword">Password</button>
+            <button id="modePattern">Pattern</button>
+          </div>
+
+          <div id="pinArea">
+            <input id="pinInput" class="input" type="password" placeholder="Enter PIN (4+ digits)"/>
+          </div>
+
+          <div id="passwordArea" style="display:none">
+            <input id="passwordInput" class="input" type="password" placeholder="Enter password (6+ chars)"/>
+          </div>
+
+          <div id="patternArea" style="display:none;text-align:center">
+            <div class="patternGrid" id="patternGrid"></div>
+            <div class="muted">Tap nodes in order to create pattern. Then press Unlock.</div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn primary" id="unlockBtn">Unlock</button>
+            <button class="btn" id="clearBtn">Clear</button>
+            <button class="btn" id="goSettingsBtn">Settings</button>
+          </div>
+
+          <div id="lockMsg" class="muted" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main UI -->
+    <div class="wrap" style="display:none" id="mainUI">
+      <div>
+        <header class="card">
+          <div class="logo">
+            <div class="mark">LD</div>
+            <div>
+              <h1>Lock Diary</h1>
+              
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="tag" id="userTag">Local User</div>
+            <button class="btn" id="openLocks">Locks</button>
+            <button class="btn" id="signOutBtn" style="display:none">Sign out</button>
+          </div>
+        </header>
+
+        <div style="margin-top:14px" class="card editor">
+          <input id="titleInput" class="title" placeholder="Title (optional)" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="fileInput" type="file" accept="image/*" class="small" />
+            <div class="muted">Attach photo (optional)</div>
+          </div>
+          <textarea id="contentInput" class="mark" placeholder="Write your entry in Markdown..."></textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" id="saveDraft">Save Draft</button>
+            <button class="btn primary" id="saveEntry">Save Entry</button>
+          </div>
+          <div class="muted">Drafts auto-saved to localStorage</div>
+        </div>
+
+        <div style="margin-top:12px" class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <input id="searchInput" class="input" placeholder="Search by title or date (YYYY-MM-DD)"/>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn" id="exportAllMd">Export All (.md)</button>
+              <button class="btn" id="exportAllPdf">Export All (.pdf)</button>
+            </div>
+          </div>
+        </div>
+
+        <footer>
+          Built for you • Local-first • { Privacy: yours }
+        </footer>
+      </div>
+
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <h3 style="margin:0 0 8px 0">Entries</h3>
+          <div id="entriesList"></div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 8px 0">Preview</h3>
+          <div id="previewArea" style="min-height:120px;padding:8px;border-radius:8px;border:1px solid var(--glass-border);background:transparent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal (simple) -->
+    <div id="settingsModal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;padding:20px;z-index:999">
+      <div class="card" style="max-width:640px;width:100%">
+        <h3 style="margin-top:0">Settings — Locks</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="muted">Set PIN</div>
+            <input id="setPin" class="input" placeholder="New PIN (4+)" />
+            <button class="btn primary" id="savePinBtn" style="margin-top:8px">Save PIN</button>
+          </div>
+          <div>
+            <div class="muted">Set Password</div>
+            <input id="setPassword" class="input" placeholder="New password (6+)" />
+            <button class="btn primary" id="savePasswordBtn" style="margin-top:8px">Save Password</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Reset Pattern</div>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button class="btn" id="clearPatternBtn">Clear Pattern</button>
+            <button class="btn" id="savePatternBtn">Save Current Pattern</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn" id="closeSettings">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // =========================
+  // Firebase Init (compat)
+  // =========================
+  const firebaseConfig = {
+    apiKey: "AIzaSyD4O6SHrpeDnzKMBWkudVFk1j1JoYiO3HY",
+    authDomain: "calling-app-e7ad2.firebaseapp.com",
+    projectId: "calling-app-e7ad2",
+    storageBucket: "calling-app-e7ad2.firebasestorage.app",
+    messagingSenderId: "241816266208",
+    appId: "1:241816266208:web:3648364051e54f1ca83785"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  // Google Login logic
+  const googleLoginBtn = document.getElementById('googleLoginBtn');
+  const firebaseUserInfo = document.getElementById('firebaseUserInfo');
+  function updateFirebaseUserInfo(user) {
+    if (user) {
+      firebaseUserInfo.textContent = `Signed in: ${user.displayName || user.email}`;
+      googleLoginBtn.style.display = 'none';
+      document.getElementById('userTag').textContent = user.displayName || user.email || 'Google User';
+      document.getElementById('signOutBtn').style.display = '';
+    } else {
+      firebaseUserInfo.textContent = '';
+      googleLoginBtn.style.display = '';
+      document.getElementById('userTag').textContent = 'Local User';
+      document.getElementById('signOutBtn').style.display = 'none';
+    }
+  }
+  auth.onAuthStateChanged(updateFirebaseUserInfo);
+  googleLoginBtn.onclick = function() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(e => alert('Google sign-in error: ' + e.message));
+  };
+  document.getElementById('signOutBtn').onclick = function() {
+    auth.signOut();
+  };
+
+  /* =========================
+     Utility functions
+     ========================= */
+  function $(sel){return document.querySelector(sel)}
+  function $all(sel){return Array.from(document.querySelectorAll(sel))}
+
+  // simple SHA-256 using Web Crypto, returns hex
+  async function sha256Hex(text){
+    const enc = new TextEncoder();
+    const data = enc.encode(text);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    const arr = Array.from(new Uint8Array(hash));
+    return arr.map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  // storage helpers
+  const LS = {
+    get(key, def=null){ try{ const v = localStorage.getItem(key); return v? JSON.parse(v): def } catch(e){return def} },
+    set(key, val){
+      try {
+        localStorage.setItem(key, JSON.stringify(val));
+      } catch(e) {
+        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+          alert('Storage full! You have reached the browser limit. Please export or delete some entries.');
+        } else {
+          alert('Storage error: ' + e.message);
+        }
+        throw e;
+      }
+    },
+    del(key){ localStorage.removeItem(key) }
+  }
+
+  // unique id
+  function nid(){ return 'id_'+Date.now()+'_'+Math.random().toString(36).slice(2,6) }
+
+  /* =========================
+     App state
+     ========================= */
+  let appState = {
+    unlocked: false,
+    mode: 'pin', // pin|password|pattern
+    pattern: [], // array of indexes (0..8)
+    entries: LS.get('ld_entries', []),
+    draft: LS.get('ld_draft', {title:'', content:'', image:null})
+  };
+
+  /* =========================
+     Lock screen logic
+     ========================= */
+
+  // create pattern grid UI
+  const patternGrid = $('#patternGrid');
+  for(let i=0;i<9;i++){
+    const d = document.createElement('div');
+    d.className='dot'; d.dataset.i = i; d.textContent = i+1;
+    d.addEventListener('click', ()=> {
+      if(!d.classList.contains('active')){
+        d.classList.add('active'); appState.pattern.push(i);
+      } else {
+        // ignore duplicates
+      }
+      // small animation
+      d.style.transform='scale(0.95)'; setTimeout(()=> d.style.transform='',120);
+    });
+    patternGrid.appendChild(d);
+  }
+
+  // UI refs
+  const lockScreen = $('#lockScreen');
+  const mainUI = $('#mainUI');
+  const lockMsg = $('#lockMsg');
+  const modePinBtn = $('#modePin'), modePasswordBtn = $('#modePassword'), modePatternBtn = $('#modePattern');
+  const pinArea = $('#pinArea'), passwordArea = $('#passwordArea'), patternArea = $('#patternArea');
+  const pinInput = $('#pinInput'), pwInput = $('#passwordInput');
+
+  // show/hide lock areas
+  function setMode(mode){
+    appState.mode = mode;
+    $('#modePin').classList.toggle('active', mode==='pin');
+    $('#modePassword').classList.toggle('active', mode==='password');
+    $('#modePattern').classList.toggle('active', mode==='pattern');
+    pinArea.style.display = mode==='pin'? 'block':'none';
+    passwordArea.style.display = mode==='password'? 'block':'none';
+    patternArea.style.display = mode==='pattern'? 'block':'none';
+    lockMsg.textContent = '';
+  }
+  modePinBtn.onclick = ()=> setMode('pin')
+  modePasswordBtn.onclick = ()=> setMode('password')
+  modePatternBtn.onclick = ()=> setMode('pattern')
+
+  // load saved locks (hash strings)
+  async function getSavedLock(type){
+    return LS.get('lock_'+type, null);
+  }
+  async function setSavedLock(type, hexHash){
+    LS.set('lock_'+type, hexHash);
+  }
+
+  // check if locks exist; if none, bypass lock
+  (async ()=>{
+    const pin = await getSavedLock('pin'), pw = await getSavedLock('password'), pat = await getSavedLock('pattern');
+    if(!pin && !pw && !pat){
+      // no lock configured -> auto-unlock
+      unlockApp();
+    } else {
+      // If already unlocked in previous session, show main UI
+      if(appState.unlocked){
+        unlockApp();
+      }
+    }
+  })();
+
+  async function tryUnlock(){
+    lockMsg.textContent = '';
+    try{
+      if(appState.mode === 'pin'){
+        const stored = await getSavedLock('pin');
+        if(!stored){ lockMsg.textContent = 'No PIN set. Go to Settings.'; return }
+        const h = await sha256Hex(pinInput.value || '');
+        if(h === stored){ unlockApp(); } else lockMsg.textContent = 'Wrong PIN';
+      } else if(appState.mode === 'password'){
+        const stored = await getSavedLock('password');
+        if(!stored){ lockMsg.textContent = 'No password set. Go to Settings.'; return }
+        const h = await sha256Hex(pwInput.value || '');
+        if(h === stored){ unlockApp(); } else lockMsg.textContent = 'Wrong password';
+      } else {
+        const stored = await getSavedLock('pattern');
+        const curr = appState.pattern.join('-');
+        if(!stored){ lockMsg.textContent = 'No pattern saved. Go to Settings.'; return }
+        const h = await sha256Hex(curr);
+        if(h === stored){ unlockApp(); } else lockMsg.textContent = 'Wrong pattern';
+      }
+    }catch(e){ lockMsg.textContent = 'Error: '+e.message }
+  }
+
+  $('#unlockBtn').onclick = tryUnlock;
+  $('#clearBtn').onclick = ()=>{
+    pinInput.value=''; pwInput.value=''; appState.pattern=[]; $all('.dot').forEach(d=>d.classList.remove('active')); lockMsg.textContent='';
+  }
+
+  function unlockApp(){
+    appState.unlocked = true;
+    lockScreen.style.display = 'none';
+    mainUI.style.display = 'grid';
+    renderEntries();
+    loadDraftToUI();
+  }
+
+  // Settings modal handlers
+  $('#goSettingsBtn').onclick = ()=> { $('#settingsModal').style.display='flex' }
+  $('#closeSettings').onclick = ()=> { $('#settingsModal').style.display='none' }
+
+  // save pin/password/pattern
+  $('#savePinBtn').onclick = async ()=>{
+    const v = $('#setPin').value.trim();
+    if(v.length<4){ alert('PIN must be 4+ digits'); return }
+    await setSavedLock('pin', await sha256Hex(v));
+    alert('PIN saved locally.');
+    $('#setPin').value='';
+  }
+  $('#savePasswordBtn').onclick = async ()=>{
+    const v = $('#setPassword').value.trim();
+    if(v.length<6){ alert('Password must be 6+ chars'); return }
+    await setSavedLock('password', await sha256Hex(v));
+    alert('Password saved locally.');
+    $('#setPassword').value='';
+  }
+  $('#savePatternBtn').onclick = async ()=>{
+    if(appState.pattern.length < 4) { alert('Pattern too short (min 4 nodes)'); return }
+    const h = await sha256Hex(appState.pattern.join('-'));
+    await setSavedLock('pattern', h);
+    alert('Pattern saved locally.');
+  }
+  $('#clearPatternBtn').onclick = ()=>{
+    appState.pattern=[]; $all('.dot').forEach(d=>d.classList.remove('active')); alert('Pattern cleared (local state only).')
+  }
+
+  /* =========================
+     Diary entries logic
+     ========================= */
+
+  const titleInput = $('#titleInput'), contentInput = $('#contentInput'), fileInput = $('#fileInput');
+  const entriesList = $('#entriesList'), previewArea = $('#previewArea'), searchInput = $('#searchInput');
+
+  // load draft
+  function loadDraftToUI(){
+    const d = appState.draft || {title:'', content:'', image:null};
+    titleInput.value = d.title || '';
+    contentInput.value = d.content || '';
+    if(d.image){ /* ignore showing preview thumbnail here */ }
+    renderPreview();
+  }
+
+  // preview markdown live
+  function renderPreview(){
+    const md = contentInput.value || '';
+    previewArea.innerHTML = marked.parse(md || 'Nothing to preview');
+  }
+  contentInput.addEventListener('input', ()=>{
+    renderPreview();
+    // save draft auto
+    appState.draft = { title: titleInput.value, content: contentInput.value, image: appState.draft.image||null };
+    LS.set('ld_draft', appState.draft);
+  });
+  titleInput.addEventListener('input', ()=> {
+    appState.draft.title = titleInput.value; LS.set('ld_draft', appState.draft);
+  });
+
+  // attach image
+  fileInput.addEventListener('change', (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ()=> {
+      appState.draft.image = reader.result; LS.set('ld_draft', appState.draft); alert('Image attached to draft.');
+    };
+    reader.readAsDataURL(f);
+    e.target.value = ''; // reset
+  });
+
+  // save entry
+  $('#saveEntry').onclick = ()=>{
+    try {
+      const title = titleInput.value.trim() || 'Untitled';
+      const content = contentInput.value.trim() || '';
+      const date = new Date().toISOString().slice(0,10);
+      const entry = { id:nid(), userId: 'local_user', date, title, content, image: appState.draft.image || null };
+      appState.entries.unshift(entry);
+      LS.set('ld_entries', appState.entries);
+      // clear draft + UI
+      appState.draft = {title:'',content:'',image:null}; LS.set('ld_draft', appState.draft);
+      titleInput.value=''; contentInput.value=''; renderPreview();
+      alert('Entry saved.');
+      renderEntries();
+    } catch(e) {
+      // Already handled in LS.set
+    }
+  }
+
+  $('#saveDraft').onclick = ()=>{
+    appState.draft = { title: titleInput.value, content: contentInput.value, image: appState.draft.image || null };
+    LS.set('ld_draft', appState.draft);
+    alert('Draft saved locally.');
+  }
+
+  function renderEntries(filter=''){
+    const q = (filter||searchInput.value||'').toLowerCase().trim();
+    entriesList.innerHTML = '';
+    const list = appState.entries.filter(e=>{
+      if(!q) return true;
+      return e.title.toLowerCase().includes(q) || e.date.includes(q)
+    });
+    if(list.length===0){ entriesList.innerHTML = '<div class="muted">No entries yet.</div>'; return }
+    for(const e of list){
+      const div = document.createElement('div'); div.className='entry'; div.style.marginBottom='8px';
+      const h = document.createElement('h3'); h.textContent = e.title;
+      const meta = document.createElement('div'); meta.className='meta'; meta.textContent = e.date;
+      const contentDiv = document.createElement('div'); contentDiv.className='content';
+      contentDiv.innerHTML = marked.parse(e.content||'');
+      if(e.image){
+        const im = document.createElement('img'); im.src = e.image; im.alt='attachment'; im.style.maxHeight='240px'; im.style.objectFit='cover';
+        contentDiv.appendChild(im);
+      }
+      const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.marginTop='8px';
+      const btnExportMd = document.createElement('button'); btnExportMd.className='btn'; btnExportMd.textContent='Export .md';
+      const btnExportPdf = document.createElement('button'); btnExportPdf.className='btn'; btnExportPdf.textContent='Export .pdf';
+      const btnDelete = document.createElement('button'); btnDelete.className='btn'; btnDelete.textContent='Delete';
+      actions.appendChild(btnExportMd); actions.appendChild(btnExportPdf); actions.appendChild(btnDelete);
+
+      btnDelete.onclick = ()=> {
+        if(!confirm('Delete this entry?')) return;
+        appState.entries = appState.entries.filter(x=>x.id!==e.id); LS.set('ld_entries', appState.entries); renderEntries(searchInput.value);
+      };
+
+      btnExportMd.onclick = ()=> {
+        const md = `# ${e.title}\n\n_${e.date}_\n\n${e.content || ''}\n`;
+        downloadFile(md, (e.title||'entry') + '.md', 'text/markdown');
+      };
+
+      btnExportPdf.onclick = ()=> {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit:'pt', format:'a4' });
+        doc.setFontSize(16); doc.text(e.title || 'Untitled', 40, 60);
+        doc.setFontSize(10); doc.text(e.date, 40, 80);
+        const lines = doc.splitTextToSize(e.content||'', 520);
+        doc.setFontSize(12); doc.text(lines, 40, 110);
+        if(e.image){
+          // add image if small enough (dataURL)
+          const img = new Image();
+          img.onload = ()=> {
+            doc.addImage(img, 'JPEG', 40, 400, 200, 120);
+            doc.save((e.title||'entry')+'.pdf');
+          };
+          img.src = e.image;
+        } else {
+          doc.save((e.title||'entry')+'.pdf');
+        }
+      };
+
+      div.appendChild(h); div.appendChild(meta); div.appendChild(contentDiv); div.appendChild(actions);
+      entriesList.appendChild(div);
+    }
+  }
+
+  function downloadFile(content, filename, mime='text/plain'){
+    const blob = new Blob([content], {type:mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
+  }
+
+  // search
+  searchInput.addEventListener('input', ()=> renderEntries());
+
+  // export all
+  $('#exportAllMd').onclick = ()=>{
+    if(appState.entries.length===0){ alert('No entries to export'); return }
+    let out = '';
+    for(const e of appState.entries){
+      out += `# ${e.title}\n\n_${e.date}_\n\n${e.content||''}\n\n---\n\n`;
+    }
+    downloadFile(out, 'lock-diary-all.md', 'text/markdown');
+  };
+  $('#exportAllPdf').onclick = async ()=>{
+    if(appState.entries.length===0){ alert('No entries to export'); return }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'a4' });
+    let y = 40;
+    for(const e of appState.entries){
+      if(y > 720){ doc.addPage(); y = 40; }
+      doc.setFontSize(14); doc.text(e.title || 'Untitled', 40, y); y+=20;
+      doc.setFontSize(10); doc.text(e.date, 40, y); y+=16;
+      const lines = doc.splitTextToSize(e.content||'', 520);
+      doc.setFontSize(11); doc.text(lines, 40, y); y += (lines.length * 14) + 12;
+      if(e.image && y < 560){
+        const img = new Image();
+        // synchronous handling is complex; for large batches we just skip image embedding to keep it simple
+      }
+    }
+    doc.save('lock-diary-all.pdf');
+  };
+
+  /* =========================
+     Init / Load state
+     ========================= */
+
+  // initial render entries
+  renderEntries();
+
+  // populate preview initially
+  renderPreview();
+
+  // load saved draft into appState (if any)
+  (function(){ appState.draft = LS.get('ld_draft', appState.draft || {title:'',content:'',image:null}) })();
+
+  // helper: attach click to open locks dialog
+  $('#openLocks').onclick = ()=> {
+    $('#settingsModal').style.display='flex';
+  };
+
+  // quick download helper for entry export via file
+  // also expose saving local lock for programmatic use
+  window.LD = {
+    saveLock: async (type, value) => { await setSavedLock(type, await sha256Hex(value)); }
+  };
+
+  // support: preview rendering when clicking an entry content (delegation)
+  entriesList.addEventListener('click', (ev)=>{
+    // intentionally left blank - preview already shown in right column by live typing
+  });
+
+  // If user unlocked by no locks configured earlier we already called unlockApp()
+  // But in case lock was hidden due to direct opening, ensure main UI remains hidden until unlocked
+  if(!appState.unlocked){
+    // For testing, if no lock is set, show main UI
+    const pin = LS.get('lock_pin', null), pw = LS.get('lock_password', null), pat = LS.get('lock_pattern', null);
+    if(!pin && !pw && !pat){
+      mainUI.style.display = 'grid';
+      lockScreen.style.display = 'none';
+    } else {
+      mainUI.style.display = 'none';
+      lockScreen.style.display = 'flex';
+    }
+  } else {
+    mainUI.style.display = 'grid';
+    lockScreen.style.display = 'none';
+  }
+
+  // load saved pattern hash into UI? not necessary - pattern is local
+  </script>
+</body>
+</html>
